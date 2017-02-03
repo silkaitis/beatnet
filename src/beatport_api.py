@@ -194,7 +194,7 @@ class beatport(object):
         '''
         artists = self.session \
                       .get(self.base_url+'artists',
-                           params = {'facets': 'genreID:' + str(genre_id),
+                           params = {'facets': 'genreId:' + str(genre_id),
                                      'perPage': 150}) \
                       .json()
 
