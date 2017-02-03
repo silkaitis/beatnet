@@ -17,7 +17,7 @@ if __name__ == '__main__':
     '''
     Build or rebuild Beatport SQL tables
     '''
-    btpt = beatport('~/beatnet/mykeys.yaml')
+    btpt = beatport('/home/ubuntu/beatnet/mykeys.yaml')
     btpt.initialize()
 
     build_artist_table(btpt)
