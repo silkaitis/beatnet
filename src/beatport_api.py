@@ -4,9 +4,11 @@ import yaml
 import requests
 import urllib
 import sys
+import curses
+
+import psycopg2 as pg2
 
 from rauth import OAuth1Service
-from IPython.core.display import clear_output
 
 class beatport(object):
 
@@ -17,30 +19,31 @@ class beatport(object):
     def _setup_progress_bar(self, num_pages):
         '''
         '''
-        toolbar_width = 40
+        curses.initscr()
+        curses.curs_set(0)
 
-        # setup toolbar
-        sys.stdout.write("[%s]" % (" " * toolbar_width))
+        sentence = 'Page {} of {} complete.'.format(' '*len(str(num_pages)), str(num_pages))
+
+        sys.stdout.write(sentence)
         sys.stdout.flush()
-        sys.stdout.write("\b" * (toolbar_width+1)) # return to start of line, after '['
 
-        increment = num_pages / float(toolbar_width)
+        sys.stdout.write('\b' * (len(sentence) - 5))
 
-        return(increment)
+        return
 
-    def _update_progress_bar(self, curr_page, increment):
+    def _update_progress_bar(self, curr_page):
+        pg = str(curr_page)
 
-        if curr_page > increment:
-            # update the bar
-            sys.stdout.write("-")
-            sys.stdout.flush()
+        sys.stdout.write(pg)
+        sys.stdout.flush()
+        sys.stdout.write('\b' * len(pg))
 
-            increment += increment
-
-        return(increment)
+        return
 
     def _escape_progress_bar(self):
-        sys.stdout.write("\n")
+        sys.stdout.write('\n')
+        curses.curs_set(1)
+        curses.reset_shell_mode()
         return
 
     def _access(self, fname):
@@ -157,6 +160,8 @@ class beatport(object):
 
         pages = trks['metadata']['totalPages']
 
+        self._setup_progress_bar(pages)
+
         trk_dict = {}
 
         for i in xrange(pages):
@@ -172,9 +177,21 @@ class beatport(object):
 
                 trk_dict[trk['name']] = trk['id']
 
+            self._update_progress_bar(i + 1)
+
+        self._escape_progress_bar()
+
         return(trk_dict)
 
     def find_all_artists_by_genre_id(self, genre_id):
+        '''
+        Generate dictionary of artist name and id
+
+        INPUT
+            genre_id - Beatport genre id, INT
+        OUTPUT
+            artists - Dictionary of {artist name: artist id}, DICT
+        '''
         artists = self.session \
                       .get(self.base_url+'artists',
                            params = {'facets': 'genreID:' + str(genre_id),
@@ -183,14 +200,14 @@ class beatport(object):
 
         pages = artists['metadata']['totalPages']
 
-        incr = self._setup_progress_bar(pages)
+        self._setup_progress_bar(pages)
 
         artist_dict = {}
 
         for i in xrange(pages):
             artists = self.session \
                           .get(self.base_url + 'artists',
-                               params = {'facets': 'genreID:' + str(genre_id),
+                               params = {'facets': 'genreId:' + str(genre_id),
                                          'perPage': 150,
                                          'page': i + 1}) \
                           .json()
@@ -199,8 +216,75 @@ class beatport(object):
 
                 artist_dict[art['name'].lower()] = art['id']
 
-            incr = self._update_progress_bar(i, incr)
+            self._update_progress_bar(i + 1)
 
         self._escape_progress_bar()
 
         return(artist_dict)
+
+class sqlport(object):
+
+    def __init__(self):
+
+
+    def launch(self):
+        self.conn = pg2.connect('dbname=beatport user=ubuntu')
+        self.cur = conn.cursor()
+        return
+
+    def shutdown(self):
+        self.cur.close()
+        self.conn.close()
+        return
+
+    def _setup_progress_bar(self, num_iters):
+        '''
+        '''
+        curses.initscr()
+        curses.curs_set(0)
+
+        sentence = 'Iteration {} of {} complete.'.format(' '*len(str(num_iters)), str(num_iters))
+
+        sys.stdout.write(sentence)
+        sys.stdout.flush()
+
+        sys.stdout.write('\b' * (len(sentence) - 10))
+
+        return
+
+    def _update_progress_bar(self, curr_iter):
+        pg = str(curr_iter)
+
+        sys.stdout.write(pg)
+        sys.stdout.flush()
+        sys.stdout.write('\b' * len(pg))
+
+        return
+
+    def _escape_progress_bar(self):
+        sys.stdout.write('\n')
+        curses.curs_set(1)
+        curses.reset_shell_mode()
+        return
+
+    def build_artist_table(self, artists):
+        '''
+        Insert artist name and id into Postgres
+        '''
+        self.launch()
+
+        cur.execute('DROP TABLE IF EXISTS artist')
+        cur.execute('CREATE TABLE artist (id INT, name TEXT)')
+        conn.commit()
+
+        self._setup_progress_bar(len(artists.keys()))
+
+        i = 1
+        for name, id in artists.iteritems():
+            self._update_progress_bar(i)
+            cur.execute('INSERT INTO artist (id, name) VALUES (%s, %s)' % (id, name))
+            i += 1
+
+        self._escape_progress_bar()
+        conn.commit()
+        return
