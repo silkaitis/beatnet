@@ -225,7 +225,7 @@ class beatport(object):
 class sqlport(object):
 
     def __init__(self):
-
+        pass
 
     def launch(self):
         self.conn = pg2.connect('dbname=beatport user=ubuntu')
