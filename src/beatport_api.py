@@ -17,8 +17,6 @@ class beatport(object):
         self.base_url = 'https://oauth-api.beatport.com/catalog/3/'
 
     def _setup_progress_bar(self, num_pages):
-        '''
-        '''
         curses.initscr()
         curses.curs_set(0)
 
@@ -143,6 +141,49 @@ class beatport(object):
         else:
             return(qry[0]['id'])
 
+    def track_search_w_artist_id(self, terms, artist_id):
+        '''
+        Search Beatport
+        '''
+        qry = self.session.get('https://oauth-api.beatport.com/catalog/3/search',
+                                params = {'query': terms,
+                                          'facets': 'genreId:1,artistId:' + str(artist_id),
+                                          'perPage': 150}).json()
+
+        pages = qry['metadata']['totalPages']
+
+        results = []
+
+        for i in xrange(pages):
+
+            qry = self.session.get('https://oauth-api.beatport.com/catalog/3/search',
+                                    params = {'query': terms,
+                                              'facets': 'genreId:1,artistId:' + str(artist_id),
+                                              'perPage': 150,
+                                              'page': i + 1}).json()
+
+            for q in qry['results']:
+
+                if q['type'] == 'track':
+                    results.append(q)
+
+        return(results)
+
+    def find_track_by_track_id(self, track_id):
+        '''
+        Find track by track ID
+
+        INPUT:
+            track_id - INT
+        OUTPUT:
+            trk_dict - track details DICT
+        '''
+        trk_dict = self.session \
+                       .get(self.base_url + 'tracks',
+                       params = {'id' : track_id}).json()['results']
+
+        return(trk_dict)
+
     def find_tracks_by_artist_id(self, artist_id):
         '''
         Find all tracks by an artist using ID
@@ -224,12 +265,12 @@ class beatport(object):
 
 class sqlport(object):
 
-    def __init__(self):
-        pass
+    def __init__(self, name):
+        self.user = name
 
     def launch(self):
-        self.conn = pg2.connect('dbname=beatport user=ubuntu')
-        self.cur = conn.cursor()
+        self.conn = pg2.connect('dbname=beatport user=' + self.user)
+        self.cur = self.conn.cursor()
         return
 
     def shutdown(self):
@@ -273,18 +314,19 @@ class sqlport(object):
         '''
         self.launch()
 
-        cur.execute('DROP TABLE IF EXISTS artist')
-        cur.execute('CREATE TABLE artist (id INT, name TEXT)')
-        conn.commit()
+        self.cur.execute('DROP TABLE IF EXISTS bprt_artist')
+        self.cur.execute('''CREATE TABLE bprt_artist (id INTEGER PRIMARY KEY,
+                                                      name TEXT)''')
+        self.conn.commit()
 
         self._setup_progress_bar(len(artists.keys()))
 
         i = 1
         for name, id in artists.iteritems():
             self._update_progress_bar(i)
-            cur.execute('INSERT INTO artist (id, name) VALUES (%s, %s)' % (id, name))
+            self.cur.execute('INSERT INTO bprt_artist (id, name) VALUES (%s, %s)', (id, name))
             i += 1
 
         self._escape_progress_bar()
-        conn.commit()
+        self.conn.commit()
         return
