@@ -2,9 +2,10 @@ import sys, curses
 
 import psycopg2 as pg2
 import cPickle as pickle
+import xmltodict
 
 from beatport_api import beatport
-from time import time
+from time import time, sleep
 
 class collectionlister(object):
     '''
@@ -171,6 +172,17 @@ class collectiontagger(object):
             if bprt_art.has_key(val):
                 self.tag_art[val] = bprt_art[val]
 
+        self.artist_tag()
+        return
+
+    def artist_tag(self):
+        '''
+        Switch artist dictionary
+        '''
+        self.art_tag = {}
+        for key, val in self.tag_art.iteritems():
+            self.art_tag[val] = key
+
         return
 
     def _recode_tracks(self):
@@ -204,6 +216,8 @@ class collectiontagger(object):
 
             qry = self.bprt.track_search_w_artist_id(trk[1], trk[0])
 
+            # sleep(1)
+
             found = 0
             i = 0
 
@@ -216,7 +230,9 @@ class collectiontagger(object):
                         a_id = qry[i]['artists'][j]['id']
 
                         if a_id == trk[0]:
-                            self.tag_trk[qry[i]['id']] = (a_id, qry[i]['name'])
+                            self.tag_trk[qry[i]['id']] = (a_id,
+                                                          qry[i]['name'],
+                                                          trk[1])
                             found = 1
 
                         j += 1
@@ -229,6 +245,36 @@ class collectiontagger(object):
         self._escape_progress_bar()
 
         return
+
+    def track_playcount(self, fname):
+        '''
+        Read XML file and match track ID with collection play count and
+        date added to collection
+        '''
+        self.play_count = {}
+
+        with open(fname, 'r') as fd:
+            doc = xmltodict.parse(fd.read())
+
+        for key, val in self.tag_trk.iteritems():
+            for track in doc['DJ_PLAYLISTS']['COLLECTION']['TRACK']:
+                # import pdb; pdb.set_trace()
+                tmp_name = track['@Name'].lower()\
+                                         .replace(' (original mix)','')\
+                                         .replace(' - original mix','')\
+                                         .replace(' 320','')
+
+                if 'feat' in val[1]:
+                    loc = val[1].find('feat')
+                    val_name = val[1].lower()[:loc - 2]
+                else:
+                    val_name = val[1].lower()
+
+                if (val_name in tmp_name) and (self.art_tag[val[0]] in track['@Artist'].lower()):
+                    self.play_count[key] = (track['@PlayCount'], track['@DateAdded'])
+
+        return
+
 
     def save_artists(self):
         '''
@@ -260,13 +306,42 @@ class collectiontagger(object):
         cur.execute('DROP TABLE IF EXISTS my_tracks')
         cur.execute('''CREATE TABLE my_tracks (id INTEGER PRIMARY KEY,
                                                artist_id INTEGER,
-                                               name TEXT)''')
+                                               bprt_name TEXT,
+                                               col_name TEXT)''')
         conn.commit()
 
         for key, val in self.tag_trk.iteritems():
             cur.execute('''INSERT INTO my_tracks (id,
                                                   artist_id,
-                                                  name)
+                                                  bprt_name,
+                                                  col_name)
+                                                  VALUES (%s, %s, %s, %s);''',
+                                                  (key, val[0], val[1], val[2]))
+
+        conn.commit()
+
+        cur.close()
+        conn.close()
+        return
+
+    def save_playcount(self):
+        '''
+        Store play count and date added
+        for each track from collection in Postgres
+        '''
+        conn = pg2.connect('dbname=beatport user=danius')
+        cur = conn.cursor()
+
+        cur.execute('DROP TABLE IF EXISTS my_playcount')
+        cur.execute('''CREATE TABLE my_playcount (id INTEGER PRIMARY KEY,
+                                                  playcount INTEGER,
+                                                  DateAdded DATE)''')
+        conn.commit()
+
+        for key, val in self.play_count.iteritems():
+            cur.execute('''INSERT INTO my_playcount (id,
+                                                     playcount,
+                                                     DateAdded)
                                                   VALUES (%s, %s, %s);''',
                                                   (key, val[0], val[1]))
 
@@ -276,9 +351,16 @@ class collectiontagger(object):
         conn.close()
         return
 
+
 if __name__ == '__main__':
     now = time()
 
+    '''
+    TO DO; Rekordbox playlist doesn't contain track details
+    such as Date Added or Play Count. Rekordbox can export an XML file which
+    contains that information. collectionlister should be refactored to use
+    the XML so all track data can be harmonized at once instead of two passes.
+    '''
     tracks = collectionlister('../data/my_collection.m3u8')
     tracks.build()
 
@@ -290,11 +372,10 @@ if __name__ == '__main__':
     ritchey.save_artists()
 
     ritchey.tag_tracks()
-
-    with open('ritchey.pkl', 'w') as f:
-        pickle.dump(ritchey, f)
-
     ritchey.save_tracks()
+
+    ritchey.track_playcount('/Users/danius/Documents/Github/beatnet/data/xml_collection_020817.xml')
+    ritchey.save_playcount()
 
     later = time()
 
