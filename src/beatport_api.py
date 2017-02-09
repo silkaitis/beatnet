@@ -122,7 +122,7 @@ class beatport(object):
         print('Session created')
         return
 
-    def find_artist_id(self, artist):
+    def artist_id(self, artist):
         '''
         Find Beatport artist ID from their name
 
@@ -141,9 +141,15 @@ class beatport(object):
         else:
             return(qry[0]['id'])
 
-    def track_search_w_artist_id(self, terms, artist_id):
+    def tracks_w_track_terms_artist_id(self, terms, artist_id):
         '''
         Search Beatport
+
+        INPUT
+            terms - track title to search, STR
+            artist_id - Beatport artist ID, INT
+        OUTPUT
+            results - list of dictionaries with track data, LIST
         '''
         qry = self.session.get('https://oauth-api.beatport.com/catalog/3/search',
                                 params = {'query': terms,
@@ -169,7 +175,7 @@ class beatport(object):
 
         return(results)
 
-    def find_track_by_track_id(self, track_id):
+    def track_w_track_id(self, track_id):
         '''
         Find track by track ID
 
@@ -184,7 +190,7 @@ class beatport(object):
 
         return(trk_dict)
 
-    def find_tracks_by_artist_id(self, artist_id):
+    def tracks_w_artist_id(self, artist_id):
         '''
         Find all tracks by an artist using ID
 
@@ -224,7 +230,7 @@ class beatport(object):
 
         return(trk_dict)
 
-    def find_all_artists_by_genre_id(self, genre_id):
+    def artists_w_genre_id(self, genre_id):
         '''
         Generate dictionary of artist name and id
 
