@@ -79,7 +79,19 @@ class collectiontagger(object):
         self.bprt = beatport
         self.my_col = my_collection
 
+    def sql_connect(self):
+        '''
+        Connect to Postgres database with Beatport data
+        '''
+        conn = pg2.connect('dbname=beatport user=danius')
+        cur = conn.cursor()
+        return(conn, cur)
+
+
     def _setup_progress_bar(self, num):
+        '''
+        Setup counter for long search processes
+        '''
         curses.initscr()
         curses.curs_set(0)
 
@@ -94,6 +106,9 @@ class collectiontagger(object):
         return
 
     def _update_progress_bar(self, curr):
+        '''
+        Update counter with current iteration
+        '''
         pg = str(curr)
 
         sys.stdout.write(pg)
@@ -103,12 +118,23 @@ class collectiontagger(object):
         return
 
     def _escape_progress_bar(self):
+        '''
+        Properly exit the counter
+        '''
         sys.stdout.write('\n')
         curses.curs_set(1)
         curses.reset_shell_mode()
         return
 
     def _convert_raw_artist(self, artists):
+        '''
+        Split artist string into individuals or producer pair
+
+        INPUT
+            artists - artist(s) name(s) for a track, STR
+        OUTPUT
+            soln - list of each artist in string, LIST
+        '''
 
         artists = artists.replace(', ','*') \
                          .replace(' feat ','*') \
@@ -120,6 +146,7 @@ class collectiontagger(object):
         soln = []
         for a in artists:
             soln.append(a)
+
             if ' & ' in a:
                 soln.extend(a.split(' & '))
 
@@ -128,15 +155,19 @@ class collectiontagger(object):
     def _artist_set(self, tracks):
         '''
         Clean up artist names and build set
+
+        INPUT
+            tracks - tracks in collection with
+                                each track as list [artist, track], LIST
+        OUTPUT
+            artists - unique artists in collection, SET
         '''
         artists = set()
 
         for track in tracks:
-
             track = self._convert_raw_artist(track[0])
 
             for art in track:
-
                 artists.add(art)
 
         return(artists)
@@ -144,9 +175,13 @@ class collectiontagger(object):
     def _beatport_artists(self):
         '''
         Fetch all artists and ids from Postgres
+
+        INPUT
+            None
+        OUTPUT
+            dict - dictionary of artist name (key) and id (val), DICT
         '''
-        conn = pg2.connect('dbname=beatport user=danius')
-        cur = conn.cursor()
+        conn, cur = self.sql_connect()
 
         cur.execute('SELECT * FROM bprt_artist;')
         data = cur.fetchall()
@@ -154,15 +189,36 @@ class collectiontagger(object):
         cur.close()
         conn.close()
 
-        btprt_artist = {}
-        for val in data:
-            btprt_artist[val[1]] = val[0]
+        return({val[1] : val[0] for val in data})
 
-        return(btprt_artist)
+    def _recode_tracks(self):
+        '''
+        Recode collection into artist id and track name
+
+        INPUT
+
+        OUTPUT
+            r_tracks - tracks in collection with
+                                each track as list [artist_id, track], LIST
+        '''
+        r_tracks = []
+        for trk in self.my_col:
+            arts = self._convert_raw_artist(trk[0])
+
+            for a in arts:
+                if self.tag_art.has_key(a):
+                    r_tracks.append([self.tag_art[a], trk[1]])
+
+        return(r_tracks)
 
     def tag_artists(self):
         '''
         Match collection artist to Beatport artist ID
+
+        INPUT
+            None
+        OUTPUT
+            None
         '''
         my_art = self._artist_set(self.my_col)
         bprt_art = self._beatport_artists()
@@ -177,27 +233,11 @@ class collectiontagger(object):
 
     def artist_tag(self):
         '''
-        Switch artist dictionary
+        Reverse artist dictionary {id : name}
         '''
-        self.art_tag = {}
-        for key, val in self.tag_art.iteritems():
-            self.art_tag[val] = key
+        self.art_tag = {val : key for key, val in self.tag_art.iteritems()}
 
         return
-
-    def _recode_tracks(self):
-        '''
-        Recode collection into artist id and track name
-        '''
-        r_tracks = []
-        for trk in self.my_col:
-            arts = self._convert_raw_artist(trk[0])
-
-            for a in arts:
-                if self.tag_art.has_key(a):
-                    r_tracks.append([self.tag_art[a], trk[1]])
-
-        return(r_tracks)
 
     def tag_tracks(self):
         '''
@@ -214,33 +254,25 @@ class collectiontagger(object):
 
             self._update_progress_bar(i)
 
-            qry = self.bprt.track_search_w_artist_id(trk[1], trk[0])
-
-            # sleep(1)
+            qry = self.bprt.tracks_w_track_terms_artist_id(trk[1], trk[0])
 
             found = 0
             i = 0
 
             while (found == 0) and (i < len(qry)):
+            #A track may appear more than once due to various reasons such
+            #re-release or year-end collection from record label.
+            #Unfortunately, Beatport assigns a new track id each time a
+            #track appears even if it is an identical track.
+                title = trk[1].decode('utf8')
+                len_title = len(title) / 2
+                if (title[:len_title] in qry[i]['name']) or \
+                   (title[:len_title] in qry[i]['title']):
 
-                if qry[i].has_key('artists'):
-                    j = 0
+                    self.tag_trk[qry[i]['id']] = (trk[0], qry[i]['name'], trk[1])
+                    found = 1
 
-                    while (found == 0) and (j < len(qry[i]['artists'])):
-                        a_id = qry[i]['artists'][j]['id']
-
-                        if a_id == trk[0]:
-                            self.tag_trk[qry[i]['id']] = (a_id,
-                                                          qry[i]['name'],
-                                                          trk[1])
-                            found = 1
-
-                        j += 1
                 i += 1
-
-            if found == 0:
-
-                self.no_trk.append(trk)
 
         self._escape_progress_bar()
 
@@ -256,23 +288,25 @@ class collectiontagger(object):
         with open(fname, 'r') as fd:
             doc = xmltodict.parse(fd.read())
 
+        self._setup_progress_bar(len(self.tag_trk))
+
+        i = 1
+
         for key, val in self.tag_trk.iteritems():
+
+            self._update_progress_bar(i)
+
             for track in doc['DJ_PLAYLISTS']['COLLECTION']['TRACK']:
-                # import pdb; pdb.set_trace()
-                tmp_name = track['@Name'].lower()\
-                                         .replace(' (original mix)','')\
-                                         .replace(' - original mix','')\
-                                         .replace(' 320','')
 
-                if 'feat' in val[1]:
-                    loc = val[1].find('feat')
-                    val_name = val[1].lower()[:loc - 2]
-                else:
-                    val_name = val[1].lower()
+                if (val[2].decode('utf8') in track['@Name']) and \
+                   (self.art_tag[val[0]] in track['@Artist'].lower()):
 
-                if (val_name in tmp_name) and (self.art_tag[val[0]] in track['@Artist'].lower()):
-                    self.play_count[key] = (track['@PlayCount'], track['@DateAdded'])
+                    self.play_count[key] = (track['@PlayCount'],
+                                            track['@DateAdded'])
 
+            i += 1
+
+        self._escape_progress_bar()
         return
 
 
@@ -280,8 +314,7 @@ class collectiontagger(object):
         '''
         Store list of artists from collection in Postgres
         '''
-        conn = pg2.connect('dbname=beatport user=danius')
-        cur = conn.cursor()
+        conn, cur = self.sql_connect()
 
         cur.execute('DROP TABLE IF EXISTS my_artist')
         cur.execute('''CREATE TABLE my_artist (id INTEGER PRIMARY KEY)''')
@@ -300,8 +333,7 @@ class collectiontagger(object):
         '''
         Store list of artists from collection in Postgres
         '''
-        conn = pg2.connect('dbname=beatport user=danius')
-        cur = conn.cursor()
+        conn, cur = self.sql_connect()
 
         cur.execute('DROP TABLE IF EXISTS my_tracks')
         cur.execute('''CREATE TABLE my_tracks (id INTEGER PRIMARY KEY,
@@ -329,8 +361,7 @@ class collectiontagger(object):
         Store play count and date added
         for each track from collection in Postgres
         '''
-        conn = pg2.connect('dbname=beatport user=danius')
-        cur = conn.cursor()
+        conn, cur = self.sql_connect()
 
         cur.execute('DROP TABLE IF EXISTS my_playcount')
         cur.execute('''CREATE TABLE my_playcount (id INTEGER PRIMARY KEY,
@@ -356,7 +387,7 @@ if __name__ == '__main__':
     now = time()
 
     '''
-    TO DO; Rekordbox playlist doesn't contain track details
+    TO DO- Rekordbox playlist doesn't contain track details
     such as Date Added or Play Count. Rekordbox can export an XML file which
     contains that information. collectionlister should be refactored to use
     the XML so all track data can be harmonized at once instead of two passes.
@@ -370,15 +401,19 @@ if __name__ == '__main__':
     ritchey = collectiontagger(bprt, tracks.collection)
     ritchey.tag_artists()
     ritchey.save_artists()
+    print('Collection Artists Saved')
 
     ritchey.tag_tracks()
     ritchey.save_tracks()
+    print('Collection Tracks Saved')
 
     ritchey.track_playcount('/Users/danius/Documents/Github/beatnet/data/xml_collection_020817.xml')
     ritchey.save_playcount()
+    print('Collection Metadata Saved')
+
 
     later = time()
 
-    t = (later - now) * (1/60)
+    t = (later - now) * (1/60.)
 
     print('Collection tagging took {} minutes'.format(t))
