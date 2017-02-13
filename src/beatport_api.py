@@ -230,6 +230,60 @@ class beatport(object):
 
         return(trk_dict)
 
+    def tracks_w_dates(self, start, stop):
+        '''
+        Find all tracks released within a date range
+
+        INPUT
+            start - beginning date, STR
+            stop - end date, STR
+        OUTPUT
+            track_ids - track data, DICT
+            {track_id : (slug, bpm)}
+
+        EXAMPLE
+            beatport.tracks_w_dates('2015-01-01', '2015-12-31')
+        '''
+        trks = self.session \
+                   .get(self.base_url+'tracks',
+                        params = {'genreId': 1,
+                                  'publishDateStart': start,
+                                  'publishDateEnd': stop,
+                                  'perPage': 150,
+                                  'page': 1}) \
+                    .json()
+
+        pages = trks['metadata']['totalPages']
+
+        soln = {}
+
+        self._setup_progress_bar(pages)
+
+        for i in xrange(pages):
+            self._update_progress_bar(i + 1)
+
+            trks = self.session \
+                       .get(self.base_url+'tracks',
+                            params = {'genreId': 1,
+                                      'publishDateStart': start,
+                                      'publishDateEnd': stop,
+                                      'perPage': 150,
+                                      'page': i + 1}) \
+                        .json()
+
+            for trk in trks['results']:
+
+                if trk['bpm'] < 100:
+                    bpm = 2 * trk['bpm']
+                else:
+                    bpm = trk['bpm']
+
+                soln[trk['id']] = (trk['slug'], bpm)
+
+        self._escape_progress_bar()
+
+        return(soln)
+
     def artists_w_genre_id(self, genre_id):
         '''
         Generate dictionary of artist name and id
@@ -268,6 +322,34 @@ class beatport(object):
         self._escape_progress_bar()
 
         return(artist_dict)
+
+    def save_track_snippet(self, track_id, location):
+        '''
+        Download and save 2-minute track snippet from Beatport
+
+        INPUT
+            track_id - Beatport track ID, INT
+            location - directory to save file, STR
+        OUTPUT
+            None
+
+        EXAMPLE
+            beatport.save_track_snippet(2828282, '/Users/person/samples/')
+        '''
+        trk = 'https://geo-samples.beatport.com/lofi/' \
+               + str(track_id) \
+               + '.LOFI.mp3'
+
+        if location[-1] != '/':
+            location += '/'
+
+        fname = location \
+                + str(track_id) \
+                + '.mp3'
+
+        urllib.urlretrieve(trk, fname)
+
+        return
 
 class sqlport(object):
 
