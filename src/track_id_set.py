@@ -17,8 +17,8 @@ if __name__ == '__main__':
 
         result = bprt.tracks_w_dates(start, stop)
 
-        for r in result:
-            trk_ids.add(r['id'])
+        for key in result.keys():
+            trk_ids.add(key)
 
     with open('track_id_set.pkl', 'w') as fin:
         pkl.dump(trk_ids, fin)
