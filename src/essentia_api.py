@@ -1,4 +1,6 @@
-import json, os
+import os
+
+import numpy as np
 
 from essentia.standard import Extractor, MonoLoader
 from pymongo import MongoClient
@@ -14,11 +16,10 @@ class essentia_api(object):
         summary - Acoustic features for provided file, JSON
     '''
 
-    def __init__(self, summary_file, feature_mean=True, feature_median=True):
+    def __init__(self, feature_mean=True, feature_median=True):
         self.f_mean = feature_mean
         self.f_median = feature_median
         self.summary = {}
-        self.fsum = summary_file
 
     def _mongo(self):
         '''
@@ -59,19 +60,19 @@ class essentia_api(object):
 
         return
 
-    def _feature_mean(self, label):
+    def _feature_mean(self, old_key, new_key):
         '''
         Summarize feature using mean
         '''
-        self.summary[label + '.mean'] = np.mean(self.features[label], axis=0).tolist()
+        self.summary[new_key + '_mean'] = np.mean(self.features[old_key], axis=0).tolist()
 
         return
 
-    def _feature_median(self, label):
+    def _feature_median(self, old_key, new_key):
         '''
         Summarize feature using median
         '''
-        self.summary[label + '.median'] = np.median(self.features[label], axis=0).tolist()
+        self.summary[new_key + '_median'] = np.median(self.features[old_key], axis=0).tolist()
 
         return
 
@@ -80,24 +81,25 @@ class essentia_api(object):
         Collect all features
         '''
         for key in self.features.descriptorNames():
+            new_key = key.replace('.', '_')
 
             #Essentia has a .isSingleValue method but it does not
             #function as intended.
             length = len(np.array(self.features[key]).shape)
 
-            if (shape > 0) and (key != 'tonal.chords_progression'):
+            if (length > 0) and (key != 'tonal.chords_progression'):
 
                 if self.f_mean:
 
-                    self._feature_mean(key)
+                    self._feature_mean(key, new_key)
 
                 if self.f_median:
 
-                    self._feature_median(key)
+                    self._feature_median(key, new_key)
 
             else:
 
-                self.summary[key] = self.features[key]
+                self.summary[new_key] = self.features[key]
 
         return
 
@@ -112,7 +114,7 @@ class essentia_api(object):
         tbl.insert_one({'track_id':self.title , 'details' : self.summary})
 
         self._mongo_close(client)
-        
+
         return
 
     def reset(self):
