@@ -1,6 +1,7 @@
-import json
+import json, os
 
 from essentia.standard import Extractor, MonoLoader
+from pymongo import MongoClient
 
 class essentia_api(object):
     '''
@@ -18,6 +19,23 @@ class essentia_api(object):
         self.f_median = feature_median
         self.summary = {}
         self.fsum = summary_file
+
+    def _mongo(self):
+        '''
+        Initialize MongoDB connection
+        '''
+        client = MongoClient()
+        db = client['beatport']
+        audio_feat = db['audio_features']
+
+        return(client, audio_feat)
+
+    def _mongo_close(self, client):
+        '''
+        Close MongoDB connection
+        '''
+        client.close()
+        return
 
     def load(self, fname):
         '''
@@ -45,7 +63,7 @@ class essentia_api(object):
         '''
         Summarize feature using mean
         '''
-        self.summary[label + '.mean'] = np.mean(self.features[label], axis=0)
+        self.summary[label + '.mean'] = np.mean(self.features[label], axis=0).tolist()
 
         return
 
@@ -53,7 +71,7 @@ class essentia_api(object):
         '''
         Summarize feature using median
         '''
-        self.summary[label + '.median'] = np.median(self.features[label], axis=0)
+        self.summary[label + '.median'] = np.median(self.features[label], axis=0).tolist()
 
         return
 
@@ -65,9 +83,9 @@ class essentia_api(object):
 
             #Essentia has a .isSingleValue method but it does not
             #function as intended.
-            shape = len(np.array(self.features[key]).shape)
+            length = len(np.array(self.features[key]).shape)
 
-            if shape > 0:
+            if (shape > 0) and (key != 'tonal.chords_progression'):
 
                 if self.f_mean:
 
@@ -78,6 +96,7 @@ class essentia_api(object):
                     self._feature_median(key)
 
             else:
+
                 self.summary[key] = self.features[key]
 
         return
@@ -88,16 +107,12 @@ class essentia_api(object):
         '''
         self._summary()
 
-        if os.path.exists(self.fsum):
+        client, tbl = self._mongo()
 
-            with open(self.fsum, 'a') as fin:
+        tbl.insert_one({'track_id':self.title , 'details' : self.summary})
 
-                fin.write("{}\n".format(json.dumps({self.title : self.summary})))
-
-        else:
-
-            print('Need to create empty summary JSON file first')
-
+        self._mongo_close(client)
+        
         return
 
     def reset(self):
