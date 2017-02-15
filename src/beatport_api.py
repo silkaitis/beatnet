@@ -349,7 +349,7 @@ class beatport(object):
 
         urllib.urlretrieve(trk, fname)
 
-        return
+        return(fname)
 
 class sqlport(object):
 
