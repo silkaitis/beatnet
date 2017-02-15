@@ -23,7 +23,7 @@ class essentia_api(object):
         '''
         Load audio file
         '''
-        loader = MonoLoader(fname)
+        loader = MonoLoader(filename=fname)
 
         self.audio = loader()
 
@@ -116,6 +116,8 @@ class essentia_api(object):
         Execute entire process for extracting audio features
         '''
         self.load(fname)
+
+        self.extract()
 
         self.export()
 

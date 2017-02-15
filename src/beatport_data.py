@@ -5,6 +5,7 @@ import psycopg2 as pg2
 
 from beatport_api import beatport, sqlport
 from essentia_api import essentia_api
+from time import time
 
 def build_artist_table(bprt, name):
     '''
@@ -16,9 +17,8 @@ def build_artist_table(bprt, name):
     slpt.build_artist_table(artists)
     return
 
-def
-
 if __name__ == '__main__':
+    now = time()
     '''
     Initialize Beatport API session
     '''
@@ -49,3 +49,7 @@ if __name__ == '__main__':
         os.remove(fname)
 
         i += 1
+
+    t = (time() - now) * (1/60.)
+
+    print('Collection tagging took {} minutes'.format(t))
