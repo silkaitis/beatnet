@@ -7,7 +7,6 @@ from beatport_api import beatport, sqlport
 from essentia_api import essentia_api
 from time import time, sleep
 from pymongo import MongoClient
-from __future__ import print_function
 
 def build_artist_table(bprt, name):
     '''
@@ -70,6 +69,6 @@ if __name__ == '__main__':
             del essentia
 
             with open('audio.log', 'a') as f:
-                f.write('{} of {} done; trk_id:{}'.format(i, n_trks, trk))
+                f.write('{} of {} done; trk_id:{}\n'.format(i, n_trks, trk))
 
     client.close()
