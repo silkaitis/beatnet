@@ -21,23 +21,6 @@ class essentia_api(object):
         self.f_median = feature_median
         self.summary = {}
 
-    def _mongo(self):
-        '''
-        Initialize MongoDB connection
-        '''
-        client = MongoClient()
-        db = client['beatport']
-        audio_feat = db['audio_features']
-
-        return(client, audio_feat)
-
-    def _mongo_close(self, client):
-        '''
-        Close MongoDB connection
-        '''
-        client.close()
-        return
-
     def load(self, fname):
         '''
         Load audio file
@@ -103,17 +86,13 @@ class essentia_api(object):
 
         return
 
-    def export(self):
+    def export(self, db):
         '''
         Save audio features to summary file
         '''
         self._summary()
 
-        client, tbl = self._mongo()
-
-        tbl.insert_one({'track_id':self.title , 'details' : self.summary})
-
-        self._mongo_close(client)
+        db.insert_one({'track_id':self.title , 'details' : self.summary})
 
         return
 
@@ -128,7 +107,7 @@ class essentia_api(object):
 
         return
 
-    def execute(self, fname):
+    def execute(self, fname, tbl):
         '''
         Execute entire process for extracting audio features
         '''
@@ -136,8 +115,6 @@ class essentia_api(object):
 
         self.extract()
 
-        self.export()
-
-        self.reset()
+        self.export(tbl)
 
         return

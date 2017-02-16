@@ -6,6 +6,8 @@ import psycopg2 as pg2
 from beatport_api import beatport, sqlport
 from essentia_api import essentia_api
 from time import time, sleep
+from pymongo import MongoClient
+from __future__ import print_function
 
 def build_artist_table(bprt, name):
     '''
@@ -22,7 +24,7 @@ if __name__ == '__main__':
     '''
     Initialize Beatport API session
     '''
-    bprt = beatport('/Users/danius/galvanize/API/mykeys.yaml')
+    bprt = beatport('/home/ubuntu/new_release_prediction/mykeys.yaml')
     bprt.initialize()
 
     '''
@@ -33,25 +35,41 @@ if __name__ == '__main__':
     '''
     Extract audio features for sub-set of tracks
     '''
-    with open('../data/track_id_set.pkl', 'r') as fin:
+    with open('track_id_set.pkl', 'r') as fin:
         trk_id_set = pkl.load(fin)
 
     trk_id_set = list(trk_id_set)
 
+    n_trks = len(trk_id_set)
+
+    '''
+    Initialize MongoDB connection
+    '''
+    client = MongoClient()
+    db = client['beatport']
+    audio_feat = db['audio_features']
+
     for i, trk in enumerate(trk_id_set):
 
-        essentia = essentia_api()
+        if bool(audio_feat.find_one({'track_id':str(trk)})):
 
-        fname = bprt.save_track_snippet(trk_id_set[i], '../samples/')
+            print('{} exists, skipped.'.format(i))
 
-        essentia.execute(fname)
+        else:
 
-        os.remove(fname)
+            print('{} of {} complete'.format(i, n_trks))
 
-        del essentia
+            essentia = essentia_api(audio_feat)
 
-        sleep(random.sample([0.5, 1, 1.5], 1)[0])
+            fname = bprt.save_track_snippet(trk, '../samples/')
 
-    t = (time() - now) * (1/60.)
+            essentia.execute(fname, audio_feat)
 
-    print('Collection tagging took {} minutes'.format(t))
+            os.remove(fname)
+
+            del essentia
+
+            with open('audio.log', 'a') as f:
+                f.write('{} of {} done; trk_id:{}'.format(i, n_trks, trk))
+
+    client.close()

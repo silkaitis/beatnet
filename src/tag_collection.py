@@ -1,4 +1,4 @@
-rkbx_tracksimport sys, curses
+import sys, curses
 
 import psycopg2 as pg2
 import cPickle as pickle
