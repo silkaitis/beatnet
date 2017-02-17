@@ -62,13 +62,23 @@ if __name__ == '__main__':
 
             fname = bprt.save_track_snippet(trk, '../samples/')
 
-            essentia.execute(fname, audio_feat)
+            try:
+                essentia.execute(fname, audio_feat)
 
-            os.remove(fname)
+                os.remove(fname)
 
-            del essentia
+                del essentia
 
-            with open('audio.log', 'a') as f:
-                f.write('{} of {} done; trk_id:{}\n'.format(i, n_trks, trk))
+                with open('audio.log', 'a') as f:
+                    
+                    f.write('{} of {} done; trk_id:{}\n'.format(i, n_trks, trk))
+
+            except Exception:
+
+                os.remove(fname)
+
+                with open('audio_fail.log', 'a') as f:
+
+                    f.write('trk_id {} failed\n'.format(trk))
 
     client.close()
