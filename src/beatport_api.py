@@ -190,6 +190,19 @@ class beatport(object):
 
         return(trk_dict)
 
+    def track_url(self, track_id):
+        '''
+        Find Beatport track url
+        '''
+        trk_dict = self.track_w_track_id(track_id)
+
+        base_url = 'http://www.beatport.com/track/'
+
+        return(base_url
+                + trk_dict[0]['slug']
+                + '/'
+                + str(trk_dict[0]['id']))
+
     def tracks_w_artist_id(self, artist_id):
         '''
         Find all tracks by an artist using ID
