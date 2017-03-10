@@ -421,7 +421,6 @@ if __name__ == '__main__':
     ritchey.save_playcount()
     print('Collection Metadata Saved')
 
-
     later = time()
 
     t = (later - now) * (1/60.)
